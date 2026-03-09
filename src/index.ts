@@ -1,4 +1,4 @@
-import { Env } from './database';
+import { Env, saveUserProfile, getUserProfile } from './database';
 import { chat } from './agent';
 
 export default {
@@ -22,6 +22,26 @@ export default {
 			const { message } = (await request.json()) as { message: string };
 			const response = await chat(env.DB, env.AI, message);
 			return new Response(JSON.stringify({ response }), {
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+			});
+		}
+
+		// GET /profile - get user profile
+		if (request.method === 'GET' && url.pathname === '/profile') {
+			const profile = await getUserProfile(env.DB);
+			return new Response(JSON.stringify(profile), {
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+			});
+		}
+
+		// POST /profile - save user profile
+		if (request.method === 'POST' && url.pathname === '/profile') {
+			const { resume_text, preferences_text } = (await request.json()) as {
+				resume_text?: string;
+				preferences_text?: string;
+			};
+			await saveUserProfile(env.DB, resume_text, preferences_text);
+			return new Response(JSON.stringify({ success: true }), {
 				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
 			});
 		}

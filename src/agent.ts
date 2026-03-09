@@ -1,32 +1,37 @@
-import { Env, getChatHistory, saveChatMessage } from './database';
+import { Env, getChatHistory, saveChatMessage, getUserProfile } from './database';
 
 export async function chat(db: D1Database, ai: Ai, userMessage: string): Promise<string> {
-  // Get chat history from DB
-  const history = await getChatHistory(db);
+	// Get chat history and user profile from DB
+	const history = await getChatHistory(db);
+	const profile = await getUserProfile(db);
 
-  // Save user message to DB
-  await saveChatMessage(db, 'user', userMessage);
+	// Build system prompt with profile context if available
+	let systemPrompt = `You are a helpful job search assistant. 
+You help the user find relevant job opportunities based on their resume and preferences.`;
 
-  // Build messages array for LLM
-  const messages = [
-    {
-      role: 'system',
-      content: `You are a helpful job search assistant. 
-      You help the user find relevant job opportunities based on their resume and preferences.`
-    },
-    ...history,
-    { role: 'user', content: userMessage }
-  ];
+	if (profile?.resume_text) {
+		systemPrompt += `\n\nUser resume:\n${profile.resume_text}`;
+	}
 
-  // Call Cloudflare Workers AI
-  const response = await ai.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
-    messages
-  });
+	if (profile?.preferences_text) {
+		systemPrompt += `\n\nUser preferences and constraints:\n${profile.preferences_text}`;
+	}
 
-  const assistantMessage = (response as { response: string }).response;
+	// Save user message to DB
+	await saveChatMessage(db, 'user', userMessage);
 
-  // Save assistant response to DB
-  await saveChatMessage(db, 'assistant', assistantMessage);
+	// Build messages array for LLM
+	const messages = [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: userMessage }];
 
-  return assistantMessage;
+	// Call Cloudflare Workers AI
+	const response = await ai.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+		messages,
+	});
+
+	const assistantMessage = (response as { response: string }).response;
+
+	// Save assistant response to DB
+	await saveChatMessage(db, 'assistant', assistantMessage);
+
+	return assistantMessage;
 }
