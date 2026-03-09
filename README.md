@@ -1,0 +1,1 @@
+wrangler d1 execute job-agent-db --local --command "$(cat migrations/001_init.sql)"
