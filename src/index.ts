@@ -1,23 +1,23 @@
-import { Env, saveUserProfile, getUserProfile } from './database';
+import { Env, saveUserProfile, getUserProfile, getRecentChatHistory } from './database';
 import { chat } from './agent';
+import { DailyJobSearchWorkflow } from './workflow';
+
+export { DailyJobSearchWorkflow };
 
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		const url = new URL(request.url);
 
-		// CORS headers for frontend
 		const corsHeaders = {
 			'Access-Control-Allow-Origin': '*',
 			'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 			'Access-Control-Allow-Headers': 'Content-Type',
 		};
 
-		// Handle preflight requests
 		if (request.method === 'OPTIONS') {
 			return new Response(null, { headers: corsHeaders });
 		}
 
-		// POST /chat - send message to agent
 		if (request.method === 'POST' && url.pathname === '/chat') {
 			const { message } = (await request.json()) as { message: string };
 			const response = await chat(env, message);
@@ -26,7 +26,13 @@ export default {
 			});
 		}
 
-		// GET /profile - get user profile
+		if (request.method === 'GET' && url.pathname === '/history') {
+			const history = await getRecentChatHistory(env.DB);
+			return new Response(JSON.stringify(history), {
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+			});
+		}
+
 		if (request.method === 'GET' && url.pathname === '/profile') {
 			const profile = await getUserProfile(env.DB);
 			return new Response(JSON.stringify(profile), {
@@ -34,7 +40,6 @@ export default {
 			});
 		}
 
-		// POST /profile - save user profile
 		if (request.method === 'POST' && url.pathname === '/profile') {
 			const { resume_text, preferences_text } = (await request.json()) as {
 				resume_text?: string;
@@ -42,6 +47,17 @@ export default {
 			};
 			await saveUserProfile(env.DB, resume_text, preferences_text);
 			return new Response(JSON.stringify({ success: true }), {
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+			});
+		}
+
+		if (request.method === 'POST' && url.pathname === '/workflow/start') {
+			const { keywords, location } = (await request.json()) as {
+				keywords: string;
+				location: string;
+			};
+			const instance = await env.WORKFLOW.create({ params: { keywords, location } });
+			return new Response(JSON.stringify({ id: instance.id }), {
 				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
 			});
 		}

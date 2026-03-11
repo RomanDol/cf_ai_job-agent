@@ -1,12 +1,24 @@
 export interface Env {
 	DB: D1Database;
+	AI: Ai;
 	ADZUNA_APP_ID: string;
 	ADZUNA_APP_KEY: string;
-	AI: Ai;
+	RESEND_API_KEY: string;
+	RESEND_TO_EMAIL: string;
+	WORKFLOW: Workflow;
 }
 
 export async function getChatHistory(db: D1Database): Promise<{ role: string; content: string }[]> {
 	const result = await db.prepare('SELECT role, content FROM chat_history ORDER BY created_at ASC').all();
+	return result.results as { role: string; content: string }[];
+}
+
+export async function getRecentChatHistory(db: D1Database): Promise<{ role: string; content: string }[]> {
+	const result = await db
+		.prepare(
+			'SELECT role, content FROM (SELECT role, content, created_at FROM chat_history ORDER BY created_at DESC LIMIT 100) ORDER BY created_at ASC',
+		)
+		.all();
 	return result.results as { role: string; content: string }[];
 }
 
@@ -30,4 +42,3 @@ export async function saveUserProfile(db: D1Database, resumeText?: string, prefe
 		.bind(resumeText ?? null, preferencesText ?? null)
 		.run();
 }
-

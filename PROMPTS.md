@@ -64,3 +64,67 @@ Update agent.ts to add tool calling support:
 ## index.ts - update chat function call
 Update the POST /chat handler in index.ts to call chat(env, message) 
 instead of chat(env.DB, env.AI, message).
+
+## workflow.ts
+Write a Cloudflare Workflow in TypeScript that runs a daily job search.
+The workflow should:
+- Accept params: keywords (string) and location (string)
+- Use a workflow step to call Adzuna API and search for jobs
+- Use a second step to save the results as a chat message in D1 with role "assistant"
+  and content like "Daily update: found X new jobs for [keywords] in [location]: ..."
+- Export the class as DailyJobSearchWorkflow extending WorkflowEntrypoint
+
+## wrangler.jsonc - add Workflow binding
+Add Workflow binding to wrangler.jsonc for DailyJobSearchWorkflow.
+
+## database.ts - add Resend email env variables
+Add RESEND_API_KEY and RESEND_TO_EMAIL string fields to the Env interface in database.ts.
+
+## email.ts
+Write a TypeScript module for Cloudflare Workers that sends email via Resend API.
+
+The function sendEmail should accept:
+- apiKey: string
+- to: string
+- subject: string
+- text: string
+
+Use fetch to POST to https://api.resend.com/emails with Authorization: Bearer apiKey header.
+Return true if successful, false if failed.
+
+## agent.ts - add send_email tool
+Update agent.ts to add a second tool send_email:
+- Import sendEmail from email.ts
+- Add send_email tool definition with parameters: subject (string) and text (string)
+- If LLM calls send_email, execute sendEmail with env.RESEND_API_KEY, env.RESEND_TO_EMAIL, subject and text
+- Handle multiple tool calls in a loop - LLM might call search_jobs and then send_email
+
+## workflow.ts - trigger agent
+Update workflow.ts so that instead of calling Adzuna directly,
+the workflow calls the chat function with a message:
+"Check Adzuna for any new jobs matching my profile and preferences. 
+If you find good matches, send me an email with the details."
+This way the LLM handles the logic of searching and deciding whether to send an email.
+
+## index.ts - add workflow endpoint
+Add WORKFLOW to Env interface in database.ts: WORKFLOW: Workflow
+
+Add POST /workflow/start endpoint to index.ts that:
+- Accepts keywords (string) and location (string) from request body
+- Starts DailyJobSearchWorkflow with those params using env.WORKFLOW.create()
+- Returns JSON with workflow instance id
+
+## index.ts - add GET /history endpoint
+Add GET /history endpoint to index.ts that returns the last 100 messages from chat_history table, ordered by created_at ASC.
+
+## database.ts - add getRecentChatHistory function
+Add function getRecentChatHistory to database.ts that fetches the last 100 messages from chat_history ordered by created_at ASC.
+
+## agent.ts - limit chat history to 100 messages
+Update getChatHistory call in agent.ts to use getRecentChatHistory instead, limiting context sent to LLM to 100 messages.
+
+## frontend/app.js - load chat history on page load
+On page load fetch GET /history and display all returned messages in the chat box before the welcome message.
+
+## frontend/index.html - remove welcome message
+Remove the hardcoded welcome message div from the chat box in index.html.
