@@ -37,3 +37,30 @@ Update agent.ts to:
 Add to index.ts:
 - GET /profile: returns resume_text and preferences_text from D1
 - POST /profile: accepts resume_text and/or preferences_text and saves to D1
+
+## adzuna.ts
+Write a TypeScript module for Cloudflare Workers that searches jobs via Adzuna API.
+
+The function searchJobs should accept:
+- appId: string
+- appKey: string  
+- keywords: string (e.g. "software engineer")
+- location: string (e.g. "london")
+- resultsPerPage: number (default 10)
+
+Return an array of jobs with fields: title, company, location, salary, description, url.
+
+Use the Adzuna API endpoint: https://api.adzuna.com/v1/api/jobs/gb/search/1
+
+## agent.ts - add Adzuna tool calling
+Update agent.ts to add tool calling support:
+- Import searchJobs from adzuna.ts
+- Pass env to the chat function instead of db and ai separately
+- Define a search_jobs tool for the LLM with parameters: keywords (string), location (string, default "london")
+- Pass the tool definition to the AI call
+- If the AI response contains tool_calls, execute searchJobs with env.ADZUNA_APP_ID and env.ADZUNA_APP_KEY
+- Format the job results as a readable string and send back to LLM for a final response
+
+## index.ts - update chat function call
+Update the POST /chat handler in index.ts to call chat(env, message) 
+instead of chat(env.DB, env.AI, message).

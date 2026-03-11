@@ -20,7 +20,7 @@ export default {
 		// POST /chat - send message to agent
 		if (request.method === 'POST' && url.pathname === '/chat') {
 			const { message } = (await request.json()) as { message: string };
-			const response = await chat(env.DB, env.AI, message);
+			const response = await chat(env, message);
 			return new Response(JSON.stringify({ response }), {
 				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
 			});
