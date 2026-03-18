@@ -13,15 +13,6 @@ export async function getChatHistory(db: D1Database): Promise<{ role: string; co
 	return result.results as { role: string; content: string }[];
 }
 
-export async function getRecentChatHistory(db: D1Database): Promise<{ role: string; content: string }[]> {
-	const result = await db
-		.prepare(
-			'SELECT role, content FROM (SELECT role, content, created_at FROM chat_history ORDER BY created_at DESC LIMIT 100) ORDER BY created_at ASC',
-		)
-		.all();
-	return result.results as { role: string; content: string }[];
-}
-
 export async function saveChatMessage(db: D1Database, role: string, content: string): Promise<void> {
 	await db.prepare('INSERT INTO chat_history (role, content) VALUES (?, ?)').bind(role, content).run();
 }
@@ -41,4 +32,13 @@ export async function saveUserProfile(db: D1Database, resumeText?: string, prefe
 		)
 		.bind(resumeText ?? null, preferencesText ?? null)
 		.run();
+}
+
+export async function getRecentChatHistory(db: D1Database): Promise<{ role: string; content: string; created_at: string }[]> {
+	const result = await db
+		.prepare(
+			'SELECT role, content, created_at FROM (SELECT role, content, created_at FROM chat_history ORDER BY created_at DESC LIMIT 100) ORDER BY created_at ASC',
+		)
+		.all();
+	return result.results as { role: string; content: string; created_at: string }[];
 }

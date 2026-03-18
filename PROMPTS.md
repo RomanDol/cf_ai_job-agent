@@ -128,3 +128,23 @@ On page load fetch GET /history and display all returned messages in the chat bo
 
 ## frontend/index.html - remove welcome message
 Remove the hardcoded welcome message div from the chat box in index.html.
+
+## database.ts - add created_at to chat history
+Update getRecentChatHistory to also return created_at field for each message.
+
+## frontend/app.js - show timestamp in chat
+Update appendMessage function to accept and display timestamp below each message in format "DD MMM YYYY, HH:MM".
+Update loadHistory to pass created_at to appendMessage.
+When sending a new message, use current time as timestamp.
+
+## workflow.ts - read search preferences from database
+Update workflow.ts to read keywords and location from user_profile preferences_text in D1 instead of accepting them as params.
+If preferences_text is empty, use default values: keywords "software engineer", location "london".
+Pass the full env to chat function as before.
+
+## agent.ts - add update_preferences tool
+Add a third tool update_preferences to agent.ts:
+- Tool name: update_preferences
+- Description: Update the user's job search preferences in the database. Call this when the user explicitly asks to change or save their search preferences, job title, location or any other long-term preferences. Do NOT call this for one-time searches.
+- Parameters: preferences_text (string) - the new preferences to save
+- When LLM calls this tool, execute saveUserProfile with the new preferences_text

@@ -1,4 +1,4 @@
-import { Env, getRecentChatHistory, saveChatMessage, getUserProfile } from './database';
+import { Env, getRecentChatHistory, saveChatMessage, getUserProfile, saveUserProfile } from './database';
 import { searchJobs } from './adzuna';
 import { sendEmail } from './email';
 
@@ -9,7 +9,9 @@ export async function chat(env: Env, userMessage: string): Promise<string> {
 	let systemPrompt = `You are a helpful job search assistant. 
 You help the user find relevant job opportunities based on their resume and preferences.
 When the user asks about jobs, always use the search_jobs tool to find real current listings.
-If you find jobs that match the user's profile and preferences, use the send_email tool to notify them.`;
+If you find jobs that match the user's profile and preferences, use the send_email tool to notify them.
+When the user explicitly asks to update or save their job search preferences, use the update_preferences tool.
+Do NOT use update_preferences for one-time searches - only when the user wants to permanently change their preferences.`;
 
 	if (profile?.resume_text) {
 		systemPrompt += `\n\nUser resume:\n${profile.resume_text}`;
@@ -52,6 +54,21 @@ If you find jobs that match the user's profile and preferences, use the send_ema
 				},
 			},
 		},
+		{
+			type: 'function',
+			function: {
+				name: 'update_preferences',
+				description:
+					"Update the user's job search preferences in the database. Call this when the user explicitly asks to change or save their search preferences, job title, location or any other long-term preferences. Do NOT call this for one-time searches.",
+				parameters: {
+					type: 'object',
+					properties: {
+						preferences_text: { type: 'string', description: 'The new preferences to save' },
+					},
+					required: ['preferences_text'],
+				},
+			},
+		},
 	];
 
 	const cleanHistory = history.filter((m) => typeof m.content === 'string' && m.content.length > 0);
@@ -71,6 +88,7 @@ If you find jobs that match the user's profile and preferences, use the send_ema
 
 	if (firstResult.tool_calls && firstResult.tool_calls.length > 0) {
 		let jobsText = '';
+		let preferencesUpdated = false;
 
 		for (const toolCall of firstResult.tool_calls) {
 			const args = typeof toolCall.arguments === 'string' ? JSON.parse(toolCall.arguments) : toolCall.arguments;
@@ -95,16 +113,25 @@ If you find jobs that match the user's profile and preferences, use the send_ema
 				const emailSent = await sendEmail(env.RESEND_API_KEY, env.RESEND_TO_EMAIL, args.subject, args.text);
 				console.log('Email sent:', emailSent);
 			}
+
+			if (toolCall.name === 'update_preferences') {
+				console.log('Updating preferences:', args);
+				await saveUserProfile(env.DB, undefined, args.preferences_text);
+				preferencesUpdated = true;
+			}
 		}
+
+		const contextMessage = jobsText
+			? `I searched for jobs and found the following:\n\n${jobsText}`
+			: preferencesUpdated
+				? 'I have updated your job search preferences.'
+				: 'I processed your request.';
 
 		const finalResponse = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
 			messages: [
 				{ role: 'system', content: systemPrompt },
 				{ role: 'user', content: userMessage },
-				{
-					role: 'assistant',
-					content: jobsText ? `I searched for jobs and found the following:\n\n${jobsText}` : 'I processed your request.',
-				},
+				{ role: 'assistant', content: contextMessage },
 			],
 		});
 
