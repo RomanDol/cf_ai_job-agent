@@ -1,17 +1,24 @@
 import { Env, getRecentChatHistory, saveChatMessage, getUserProfile, saveUserProfile } from './database';
 import { searchJobs } from './adzuna';
-import { sendEmail } from './email';
 
 export async function chat(env: Env, userMessage: string): Promise<string> {
 	const history = await getRecentChatHistory(env.DB);
 	const profile = await getUserProfile(env.DB);
 
-	let systemPrompt = `You are a helpful job search assistant. 
-You help the user find relevant job opportunities based on their resume and preferences.
-When the user asks about jobs, always use the search_jobs tool to find real current listings.
-If you find jobs that match the user's profile and preferences, use the send_email tool to notify them.
-When the user explicitly asks to update or save their job search preferences, use the update_preferences tool.
-Do NOT use update_preferences for one-time searches - only when the user wants to permanently change their preferences.`;
+	let systemPrompt = `You are a personal career advisor and job search assistant. 
+Your main job is NOT to list all found vacancies - it is to analyze each job against the user's resume and preferences, and select only the most relevant opportunities.
+
+When you find jobs:
+- Compare each job requirements with the user's skills and experience
+- Select only jobs that are a good match
+- For each selected job explain WHY it matches the user's profile
+- Point out any concerns or skill gaps
+- Present results in a clear, friendly way as a career advisor would
+- If no jobs are a good match, say so honestly and explain why
+
+When the user asks to update preferences, use the update_preferences tool.
+When the user asks about jobs, use the search_jobs tool to find real current listings.
+Do NOT use update_preferences for one-time searches.`;
 
 	if (profile?.resume_text) {
 		systemPrompt += `\n\nUser resume:\n${profile.resume_text}`;
@@ -42,24 +49,9 @@ Do NOT use update_preferences for one-time searches - only when the user wants t
 		{
 			type: 'function',
 			function: {
-				name: 'send_email',
-				description: 'Send an email notification to the user with job matches',
-				parameters: {
-					type: 'object',
-					properties: {
-						subject: { type: 'string', description: 'Email subject line' },
-						text: { type: 'string', description: 'Email body text with job details' },
-					},
-					required: ['subject', 'text'],
-				},
-			},
-		},
-		{
-			type: 'function',
-			function: {
 				name: 'update_preferences',
 				description:
-					"Update the user's job search preferences in the database. Call this when the user explicitly asks to change or save their search preferences, job title, location or any other long-term preferences. Do NOT call this for one-time searches.",
+					"Update the user's job search preferences in the database. Call this when the user explicitly asks to change or save their search preferences. Do NOT call this for one-time searches.",
 				parameters: {
 					type: 'object',
 					properties: {
@@ -79,9 +71,11 @@ Do NOT use update_preferences for one-time searches - only when the user wants t
 		{ role: 'user', content: userMessage },
 	];
 
+	// First AI call - LLM decides whether to use tools
 	const firstResponse = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
 		messages,
 		tools: tools as any,
+		max_tokens: 4096,
 	});
 
 	const firstResult = firstResponse as { response?: string; tool_calls?: any[] };
@@ -102,16 +96,10 @@ Do NOT use update_preferences for one-time searches - only when the user wants t
 						? jobs
 								.map(
 									(job, i) =>
-										`${i + 1}. ${job.title} at ${job.company} (${job.location})\n   Salary: ${job.salary}\n   ${job.description.slice(0, 150)}...\n   Apply: ${job.url}`,
+										`${i + 1}. ${job.title} at ${job.company} (${job.location})\n   Salary: ${job.salary}\n   ${job.description}\n   Apply: ${job.url}`,
 								)
 								.join('\n\n')
 						: 'No jobs found for these search criteria.';
-			}
-
-			if (toolCall.name === 'send_email') {
-				console.log('Sending email:', args);
-				const emailSent = await sendEmail(env.RESEND_API_KEY, env.RESEND_TO_EMAIL, args.subject, args.text);
-				console.log('Email sent:', emailSent);
 			}
 
 			if (toolCall.name === 'update_preferences') {
@@ -121,21 +109,24 @@ Do NOT use update_preferences for one-time searches - only when the user wants t
 			}
 		}
 
-		const contextMessage = jobsText
-			? `I searched for jobs and found the following:\n\n${jobsText}`
-			: preferencesUpdated
-				? 'I have updated your job search preferences.'
-				: 'I processed your request.';
-
-		const finalResponse = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+		// Second AI call - LLM formulates response with tools available
+		const secondResponse = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
 			messages: [
 				{ role: 'system', content: systemPrompt },
 				{ role: 'user', content: userMessage },
-				{ role: 'assistant', content: contextMessage },
+				{
+					role: 'assistant',
+					content: jobsText
+						? `Here are the job results:\n\n${jobsText}`
+						: preferencesUpdated
+							? 'Preferences have been updated.'
+							: 'I processed your request.',
+				},
 			],
+			max_tokens: 4096,
 		});
 
-		const assistantMessage = (finalResponse as { response: string }).response;
+		const assistantMessage = (secondResponse as { response: string }).response;
 		await saveChatMessage(env.DB, 'assistant', assistantMessage);
 		return assistantMessage;
 	}

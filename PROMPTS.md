@@ -148,3 +148,17 @@ Add a third tool update_preferences to agent.ts:
 - Description: Update the user's job search preferences in the database. Call this when the user explicitly asks to change or save their search preferences, job title, location or any other long-term preferences. Do NOT call this for one-time searches.
 - Parameters: preferences_text (string) - the new preferences to save
 - When LLM calls this tool, execute saveUserProfile with the new preferences_text
+
+## agent.ts - remove send_email tool
+Remove send_email tool from agent.ts tools array. 
+LLM should only have access to search_jobs and update_preferences tools.
+
+## workflow.ts - send email after chat response
+Update workflow.ts to:
+- Import sendEmail from email.ts
+- After calling chat(), take the response and send it via email using sendEmail
+- Email subject: "Daily Job Search Update"
+- Only send email if response is not empty
+
+## agent.ts - update system prompt
+Update the system prompt in agent.ts to instruct the LLM that its main job is to analyze job listings against the user's resume and preferences, select only the most relevant ones, and explain why each selected job is a good match or not. The LLM should act as a personal career advisor, not just a job listing aggregator.
