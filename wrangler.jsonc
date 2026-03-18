@@ -36,4 +36,9 @@
 		"directory": "./frontend/",
 		"binding": "ASSETS",
 	},
+	
+	// Cron trigger to run the workflow daily at 9 AM
+	"triggers": {
+		"crons": ["0 9 * * *"],
+	},
 }

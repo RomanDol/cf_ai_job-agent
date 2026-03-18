@@ -1,6 +1,7 @@
 import { Env, saveUserProfile, getUserProfile, getRecentChatHistory } from './database';
 import { chat } from './agent';
 import { DailyJobSearchWorkflow } from './workflow';
+import { sendEmail } from './email';
 
 export { DailyJobSearchWorkflow };
 
@@ -52,16 +53,17 @@ export default {
 		}
 
 		if (request.method === 'POST' && url.pathname === '/workflow/start') {
-			const { keywords, location } = (await request.json()) as {
-				keywords: string;
-				location: string;
-			};
-			const instance = await env.WORKFLOW.create({ params: { keywords, location } });
+			const instance = await env.WORKFLOW.create({ params: {} });
 			return new Response(JSON.stringify({ id: instance.id }), {
 				headers: { ...corsHeaders, 'Content-Type': 'application/json' },
 			});
 		}
 
 		return new Response('Not found', { status: 404, headers: corsHeaders });
+	},
+
+	// Cron trigger - runs DailyJobSearchWorkflow on schedule
+	async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+		await env.WORKFLOW.create({ params: {} });
 	},
 } satisfies ExportedHandler<Env>;

@@ -162,3 +162,6 @@ Update workflow.ts to:
 
 ## agent.ts - update system prompt
 Update the system prompt in agent.ts to instruct the LLM that its main job is to analyze job listings against the user's resume and preferences, select only the most relevant ones, and explain why each selected job is a good match or not. The LLM should act as a personal career advisor, not just a job listing aggregator.
+
+## index.ts - add scheduled handler for cron trigger
+Add a scheduled handler to index.ts that runs DailyJobSearchWorkflow when cron trigger fires.
